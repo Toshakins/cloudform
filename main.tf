@@ -1,7 +1,4 @@
-/* TODO:
-  1. Private and public subnet
-  2. VPC endpoint to S3
-  3. Store state on S3
+/* TODO: VPC endpoint to S3
 */
 
 terraform {
@@ -9,11 +6,13 @@ terraform {
 }
 
 provider "aws" {
+  # Paris
   region = "eu-west-3"
 }
 
 locals {
   proj = "cloudform"
+  # Amazon Linux
   default_ami = "ami-4f55e332"
   default_instance_type = "t2.nano"
   default_public_key = "${join(".", list(local.proj, "pub"))}" // will return "key_name.pub"
@@ -32,7 +31,7 @@ resource "aws_internet_gateway" "default" {
   tags = "${local.tags}"
 }
 
-resource "aws_route_table" "default" {
+resource "aws_route_table" "public" {
   vpc_id = "${aws_vpc.default.id}"
   tags = "${local.tags}"
 
@@ -42,10 +41,37 @@ resource "aws_route_table" "default" {
   }
 }
 
+resource "aws_route_table" "private" {
+  vpc_id = "${aws_vpc.default.id}"
+  tags = "${local.tags}"
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    nat_gateway_id = "${aws_nat_gateway.nat_gateway.id}"
+  }
+}
+
+resource "aws_eip" "nat_eip" {
+  tags = "${local.tags}"
+}
+
+resource "aws_nat_gateway" "nat_gateway" {
+  allocation_id = "${aws_eip.nat_eip.id}"
+  subnet_id = "${aws_subnet.public.id}"
+  depends_on = ["aws_internet_gateway.default"]
+  tags = "${local.tags}"
+}
+
 resource "aws_route_table_association" "public" {
-  route_table_id = "${aws_route_table.default.id}"
+  route_table_id = "${aws_route_table.public.id}"
   subnet_id = "${aws_subnet.public.id}"
 }
+
+resource "aws_route_table_association" "private" {
+  route_table_id = "${aws_route_table.private.id}"
+  subnet_id = "${aws_subnet.private.id}"
+}
+
 
 resource "aws_subnet" "public" {
   cidr_block = "10.0.1.0/24"
