@@ -8,6 +8,7 @@ terraform {
 provider "aws" {
   # Paris
   region = "eu-west-3"
+  profile = "my_admin"
 }
 
 locals {
