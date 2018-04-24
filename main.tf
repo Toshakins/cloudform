@@ -1,18 +1,26 @@
-/* TODO: VPC endpoint to S3
+/* TODO: roles for public and private instances
 */
 
 terraform {
   required_version = "~> 0.11"
+  backend "s3" {
+    bucket = "terraform-aws-init-bucket"
+    key = "cloudform/terraform.tfstate"
+    dynamodb_table = "TerraformLockTable"
+    region = "eu-west-3"
+    profile = "my_admin"
+  }
 }
 
 provider "aws" {
   # Paris
-  region = "eu-west-3"
+  region = "${local.region}"
   profile = "my_admin"
 }
 
 locals {
   proj = "cloudform"
+  region = "eu-west-3"
   # Amazon Linux
   default_ami = "ami-4f55e332"
   default_instance_type = "t2.nano"
@@ -127,4 +135,31 @@ resource "aws_instance" "private" {
   key_name = "${aws_key_pair.default.key_name}"
   security_groups = ["${aws_security_group.default.id}"]
   tags = "${local.tags}"
+}
+
+resource "aws_s3_bucket" "private_bucket" {
+  bucket = "cloud-private-bucket"
+}
+
+resource "aws_vpc_endpoint" "s3" {
+  vpc_id       = "${aws_vpc.default.id}"
+  service_name = "com.amazonaws.${local.region}.s3"
+  route_table_ids = ["${aws_route_table.private.id}"]
+  policy = <<EOF
+{
+  "Statement": [
+    {
+      "Sid": "Access-to-private-bucket-only",
+      "Principal": "*",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject"
+      ],
+      "Effect": "Allow",
+      "Resource": ["${aws_s3_bucket.private_bucket.arn}",
+                   "${aws_s3_bucket.private_bucket.arn}/*"]
+    }
+  ]
+}
+EOF
 }
